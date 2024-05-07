@@ -1,0 +1,55 @@
+pipeline {
+    agent any
+    environment {
+        SONAR_TOKEN = credentials('sonar-token')
+        SONAR_URL = 'http://localhost:9000' // Update with your SonarQube server URL
+    }
+    
+    triggers {
+        // Trigger the pipeline on every push to the specified GitHub repository
+        githubPush()
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout the source code from Git
+                git branch: 'feature/jenkins',
+                url: 'https://github.com/asingh766/aafes-jenkins.git'
+            }
+        }
+        // stage('Build image') {
+
+        //     //This builds the actual image
+        //     steps{
+        //         sh 'docker build -t my_test_image .'
+        //     }
+        // }
+        stage('Sonarqube') {
+            environment {
+                scannerHome = tool 'SonarQube-scanner'
+                }
+            steps {
+                withSonarQubeEnv('SonarQube Server') {
+                sh "${scannerHome}/bin/sonar-scanner \
+                -Dsonar.projectKey=aafes-myecp-flutterflow \
+                -Dsonar.sources=. \
+                -Dsonar.java.binaries=."
+                }
+            }
+        }
+        stage("Quality gate") {
+            steps {
+                waitForQualityGate abortPipeline: true
+            }
+        }
+        stage('Test') {
+            steps {
+                // Run tests here
+                // For example, you can execute unit tests
+                echo 'Hello world.'
+            }
+        }
+        
+    }
+}
