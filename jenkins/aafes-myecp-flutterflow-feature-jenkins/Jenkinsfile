@@ -1,0 +1,53 @@
+pipeline {
+  agent none
+  environment{
+        REPO_LOCATION= "us-central1"
+        PROJECT = "aafes-myecp"
+        REPO_NAME = "jenkins"
+        APP_NAME ="myecp-webapp"
+        IMAGE_NAME = "${REPO_LOCATION}-docker.pkg.dev/${PROJECT}/${REPO_NAME}/${APP_NAME}"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+       
+      }
+  stages {
+    stage('Docker Build') {
+      agent any
+      steps {
+        sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+      }
+    }
+    stage('Push image') {
+      agent any
+      environment {
+        CREDENTIALS_ID = credentials('gcp-sa-key')
+        }
+      steps{
+        script {
+           withEnv(['GCLOUD_PATH=/var/lib/jenkins/workspace/flutter/google-cloud-sdk/bin']) {
+              //sh '$GCLOUD_PATH/gcloud --version'
+              sh '$GCLOUD_PATH/gcloud auth activate-service-account --key-file=$CREDENTIALS_ID'
+              sh 'cat $CREDENTIALS_ID | docker login -u _json_key --password-stdin https://us-central1-docker.pkg.dev/aafes-myecp/jenkins'
+              sh 'docker push $IMAGE_NAME:$IMAGE_TAG'
+              sh 'docker logout https://${REPO_LOCATION}-docker.pkg.dev'
+            }
+        }
+      }
+    }
+    stage('Deploy on Cloud Run'){
+      agent any
+      environment {
+        CREDENTIALS_ID = credentials('gcp-sa-key')
+        CLOUD_RUN_SERVICE = 'aafes-myecp-flutterflow-qa'
+      }
+      steps{
+        script{
+          withEnv(['GCLOUD_PATH=/var/lib/jenkins/workspace/flutter/google-cloud-sdk/bin']) {
+              //sh '$GCLOUD_PATH/gcloud --version'
+              sh '$GCLOUD_PATH/gcloud auth activate-service-account --key-file=$CREDENTIALS_ID'
+              sh '$GCLOUD_PATH/gcloud run deploy $CLOUD_RUN_SERVICE --image $IMAGE_NAME:$IMAGE_TAG --platform=managed --region=us-central1 --port=80 --revision-suffix=$IMAGE_VERSION --cpu=6 --memory=16Gi --set-env-vars BASE_URL=apigateway-dev-ccoox6j1.uc.gateway.dev --project $PROJECT'
+            }
+        }
+      }
+    }
+  }
+}
