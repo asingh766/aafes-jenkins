@@ -1,6 +1,8 @@
 pipeline {
   agent none
   environment{
+        SONAR_TOKEN = credentials('sonar-token')
+        SONAR_URL = 'http://localhost:9000'
         REPO_LOCATION= "us-central1"
         PROJECT = "aafes-myecp"
         REPO_NAME = "jenkins"
@@ -9,7 +11,37 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
        
       }
+    triggers {
+        // Trigger the pipeline on every push to the specified GitHub repository
+        githubPush()
+    }
+
   stages {
+    stage('Checkout') {
+            steps {
+                // Checkout the source code from Git
+                git branch: 'feature/jenkins',
+                url: 'https://github.com/asingh766/aafes-jenkins.git'
+            }
+        }
+      stage('Sonarqube') {
+            environment {
+                scannerHome = tool 'SonarQube-scanner'
+                }
+            steps {
+                withSonarQubeEnv('SonarQube Server') {
+                sh "${scannerHome}/bin/sonar-scanner \
+                -Dsonar.projectKey=aafes-myecp-flutterflow \
+                -Dsonar.sources=. \
+                -Dsonar.java.binaries=."
+                }
+            }
+        }
+        stage("Quality gate") {
+            steps {
+                waitForQualityGate abortPipeline: true
+            }
+        }
     stage('Docker Build') {
       agent any
       steps {
